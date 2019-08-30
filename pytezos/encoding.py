@@ -170,15 +170,7 @@ def is_key(v) -> bool:
 
 
 def forge_nat(value) -> bytes:
-    """
-    Encode a number using LEB128 encoding (Zarith)
-    :param int value: the value to encode
-    :return: encoded value
-    :rtype: bytes
-    """
-    if value < 0:
-        raise ValueError('Value cannot be negative.')
-
+    assert value >= 0, 'Value cannot be negative.'
     buf = bytearray()
     more = True
 
@@ -196,6 +188,10 @@ def forge_nat(value) -> bytes:
     return bytes(buf)
 
 
+def parse_nat(data: bytes, offset=0) -> tuple:
+    pass
+
+
 def forge_public_key(value) -> bytes:
     prefix = value[:4]
     res = base58.b58decode_check(value)[4:]
@@ -210,13 +206,15 @@ def forge_public_key(value) -> bytes:
     raise ValueError(f'Unrecognized key type: #{prefix}')
 
 
-def parse_public_key(data: bytes):
-    key_prefix = {
-        b'\x00': b'edpk',
-        b'\x01': b'sppk',
-        b'\x02': b'p2pk'
+def parse_public_key(data: bytes, offset=0) -> tuple:
+    curve_data = {
+        b'\x00': (b'edpk', 32),
+        b'\x01': (b'sppk', 33),
+        b'\x02': (b'p2pk', 33)
     }
-    return base58_encode(data[1:], key_prefix[data[:1]]).decode()
+    prefix, length = curve_data[data[offset:offset + 1]]
+    public_key = base58_encode(data[offset + 1:offset + 1 + length], prefix).decode()
+    return public_key, offset + length + 1
 
 
 def forge_address(value, tz_only=False) -> bytes:
@@ -237,29 +235,44 @@ def forge_address(value, tz_only=False) -> bytes:
     return res[1:] if tz_only else res
 
 
-def parse_address(data: bytes):
+def parse_address(data: bytes, offset=0) -> tuple:
     tz_prefixes = {
         b'\x00\x00': b'tz1',
         b'\x00\x01': b'tz2',
         b'\x00\x02': b'tz3'
     }
+    length = 20
 
+    start = data[offset:offset + 2]
     for bin_prefix, tz_prefix in tz_prefixes.items():
-        if data.startswith(bin_prefix):
-            return base58_encode(data[2:], tz_prefix).decode()
+        if bin_prefix == start:
+            address = base58_encode(data[offset + 2:offset + 2 + length], tz_prefix)
+            return address.decode(), offset + 2 + length
 
-    if data.startswith(b'\x01') and data.endswith(b'\x00'):
-        return base58_encode(data[1:-1], b'KT1').decode()
+    if data[offset] == b'\x01' and data[offset + 1 + length] == b'\x00':
+        address = base58_encode(data[offset + 1:offset + 1 + length], b'KT1')
+        return address.decode(), offset + 1 + length + 1
     else:
-        return base58_encode(data[1:], tz_prefixes[b'\x00' + data[:1]]).decode()
+        tz_prefix = tz_prefixes[b'\x00' + bytes(data[offset])]
+        address = base58_encode(data[offset + 1:offset + 1 + length], tz_prefix)
+        return address.decode(), offset + 1 + length
 
 
 def forge_bool(value) -> bytes:
     return b'\xff' if value else b'\x00'
 
 
+def parse_bool(data: bytes, offset=0) -> tuple:
+    return data[offset] == b'\xff', offset + 1
+
+
 def forge_array(data) -> bytes:
     return len(data).to_bytes(4, 'big') + data
+
+
+def parse_array(data: bytes, offset=0) -> tuple:
+    length = int.from_bytes(data[offset:offset + 4], 'big')
+    return data[offset + 4:offset + 4 + length], offset + 4 + length
 
 
 def forge_base58(value) -> bytes:

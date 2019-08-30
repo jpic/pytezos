@@ -6,7 +6,7 @@ from decimal import Decimal
 from collections import namedtuple, defaultdict
 from functools import lru_cache
 
-from pytezos.encoding import parse_address, parse_public_key, forge_public_key, forge_address, forge_base58
+from pytezos.encoding import parse_address, parse_public_key, forge_public_key, forge_address
 from pytezos.michelson.grammar import MichelsonParser
 from pytezos.michelson.formatter import format_node
 
@@ -43,9 +43,11 @@ def decode_literal(node, prim):
         return value == 'True'
     if core_type == 'bytes':
         if prim in ['address', 'key_hash', 'contract']:
-            return parse_address(bytes.fromhex(value))
+            address, _ = parse_address(bytes.fromhex(value))
+            return address
         if prim == 'key':
-            return parse_public_key(bytes.fromhex(value))
+            public_key, _ = parse_public_key(bytes.fromhex(value))
+            return public_key
     return value
 
 

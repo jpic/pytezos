@@ -136,26 +136,38 @@ len_tags = [
 
 
 def forge_int(value: int):
-    binary = format(abs(value), 'b')
+    res = bytearray()
+    i = abs(value)
 
-    if (len(binary) - 6) % 7 == 0:
-        pad = len(binary)
-    elif len(binary) <= 6:
-        pad = 6
-    else:
-        pad = len(binary) + 7 - (len(binary) - 6) % 7
+    res.append((i & 0b00111111) | (0b11000000 if value < 0 else 0b10000000))
+    i >>= 6
 
-    binary = binary.zfill(pad)
-    septets = [binary[i:i + 7] for i in range(0, len(binary), 7)]
-    reversed_septets = septets[::-1]
-    reversed_septets[0] = ('0' if value >= 0 else '1') + reversed_septets[0]
+    while i != 0:
+        res.append((i & 0b01111111) | 0b10000000)
+        i >>= 7
 
-    res = []
-    for i, septet in enumerate(reversed_septets):
-        prefix = '0' if i == len(reversed_septets) - 1 else '1'
-        res.append(int(prefix + septet, 2).to_bytes(1, 'big'))
+    res[-1] &= 0b01111111
+    return bytes(res)
 
-    return b''.join(res)
+
+def parse_int(data: bytes, offset=0):
+    value = 0
+    length = 1
+
+    while data[offset + length - 1] & 0b10000000 != 0:
+        length += 1
+
+    for i in range(offset + length - 1, offset, -1):
+        value <<= 7
+        value |= data[i] & 0b01111111
+
+    value <<= 6
+    value |= data[offset] & 0b00111111
+
+    if (data[offset] & 0b01000000) != 0:
+        value = -value
+
+    return value, offset + length
 
 
 def forge_micheline(data):
